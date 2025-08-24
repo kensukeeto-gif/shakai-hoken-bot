@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>社会保険加入診断ボット</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .bg-gradient-custom {
+            background-image: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+        .card-bg {
+            background-color: #ffffff;
+        }
+        .input-style {
+            padding: 0.75rem 1rem;
+            border-radius: 9999px;
+            border: 1px solid #e2e8f0;
+            width: 100%;
+            text-align: center;
+            font-size: 1.25rem;
+            color: #4a5568;
+            transition: border-color 0.3s ease;
+        }
+        .input-style:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+        .rounded-button {
+            transition: all 0.3s ease;
+        }
+        .rounded-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gradient-custom flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 text-gray-800">
+
+    <div id="app" class="w-full max-w-2xl bg-white shadow-xl rounded-2xl p-6 sm:p-8">
+        <!-- ボットのヘッダー -->
+        <div class="text-center mb-6">
+            <h1 class="text-2xl sm:text-3xl font-bold text-blue-700 mb-2">社会保険加入診断ボット</h1>
+            <p class="text-base sm:text-lg text-gray-600">あなたの働き方で社会保険の加入が必要か診断します。</p>
+        </div>
+
+        <!-- 質問カードのコンテナ -->
+        <div id="question-container" class="space-y-6">
+            <!-- 質問がここに動的に挿入されます -->
+        </div>
+
+        <!-- 結果表示エリア -->
+        <div id="result-container" class="hidden mt-8 text-center">
+            <h2 class="text-2xl sm:text-3xl font-bold text-green-700 mb-4">診断結果</h2>
+            <div id="result-content" class="text-left bg-gray-50 rounded-xl p-6 shadow-inner border border-gray-200">
+                <!-- 結果がここに表示されます -->
+            </div>
+            <button id="restart-button" class="mt-6 px-8 py-3 bg-blue-500 text-white text-lg font-bold rounded-full shadow-lg hover:bg-blue-600 focus:outline-none rounded-button">
+                もう一度診断する
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // DOMContentLoaded イベントでアプリを初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            const questionContainer = document.getElementById('question-container');
+            const resultContainer = document.getElementById('result-container');
+            const resultContent = document.getElementById('result-content');
+            const restartButton = document.getElementById('restart-button');
+
+            // 質問データ
+            const questions = [
+                {
+                    id: 'hourlyWage',
+                    question: '時給を入力してください（円）',
+                    type: 'input',
+                    inputType: 'number',
+                    placeholder: '例: 1200'
+                },
+                {
+                    id: 'weeklyHours',
+                    question: '週の所定労働時間を入力してください（時間）',
+                    type: 'input',
+                    inputType: 'number',
+                    placeholder: '例: 25'
+                },
+                {
+                    id: 'age',
+                    question: 'あなたの年齢は40歳以上ですか？',
+                    type: 'options',
+                    options: [
+                        { text: 'はい', value: true },
+                        { text: 'いいえ', value: false }
+                    ]
+                },
+                {
+                    id: 'isStudent',
+                    question: 'あなたは学生ですか？',
+                    type: 'options',
+                    options: [
+                        { text: 'はい', value: true },
+                        { text: 'いいえ', value: false }
+                    ]
+                }
+            ];
+
+            // ユーザーの回答を保存するオブジェクト
+            let userAnswers = {};
+            // 現在の質問インデックス
+            let currentQuestionIndex = 0;
+
+            // 質問を表示する関数
+            const renderQuestion = () => {
+                if (currentQuestionIndex >= questions.length) {
+                    showResult();
+                    return;
+                }
+
+                const q = questions[currentQuestionIndex];
+
+                const card = document.createElement('div');
+                card.className = 'card-bg p-6 sm:p-8 rounded-xl shadow-lg border border-gray-100';
+
+                let questionContent = '';
+                if (q.type === 'input') {
+                    questionContent = `
+                        <h3 class="text-xl sm:text-2xl font-bold mb-4 text-center text-gray-700">${q.question}</h3>
+                        <div class="flex flex-col items-center">
+                            <input id="${q.id}-input" type="${q.inputType}" placeholder="${q.placeholder}" class="input-style mb-4">
+                            <button id="next-button" class="rounded-button w-full max-w-sm bg-blue-500 text-white font-semibold text-lg py-3 px-6 rounded-full shadow-md hover:bg-blue-600 focus:outline-none">
+                                次へ
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    questionContent = `
+                        <h3 class="text-xl sm:text-2xl font-bold mb-4 text-center text-gray-700">${q.question}</h3>
+                        <div class="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center">
+                            ${q.options.map(option => `
+                                <button
+                                    class="rounded-button w-full sm:w-1/2 bg-blue-500 text-white font-semibold text-lg py-4 px-6 rounded-full shadow-md hover:bg-blue-600 focus:outline-none"
+                                    data-value="${option.value}"
+                                    data-id="${q.id}"
+                                >
+                                    ${option.text}
+                                </button>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+                
+                card.innerHTML = questionContent;
+                questionContainer.innerHTML = '';
+                questionContainer.appendChild(card);
+
+                if (q.type === 'input') {
+                    const nextButton = document.getElementById('next-button');
+                    const inputField = document.getElementById(`${q.id}-input`);
+                    nextButton.addEventListener('click', () => {
+                        const value = inputField.value;
+                        if (value) {
+                            userAnswers[q.id] = parseFloat(value);
+                            currentQuestionIndex++;
+                            renderQuestion();
+                        } else {
+                            alert('入力してください');
+                        }
+                    });
+                } else {
+                    const buttons = card.querySelectorAll('button');
+                    buttons.forEach(button => {
+                        button.addEventListener('click', () => {
+                            userAnswers[button.dataset.id] = JSON.parse(button.dataset.value);
+                            currentQuestionIndex++;
+                            renderQuestion();
+                        });
+                    });
+                }
+            };
+
+            // 結果を表示する関数
+            const showResult = () => {
+                questionContainer.classList.add('hidden');
+                resultContainer.classList.remove('hidden');
+
+                const { hourlyWage, weeklyHours, age, isStudent } = userAnswers;
+
+                const monthlyWage = (hourlyWage * weeklyHours * 4.33);
+
+                const result = {
+                    healthInsurance: { required: false, reason: '条件を満たしていません。' },
+                    pension: { required: false, reason: '条件を満たしていません。' },
+                    nursingCareInsurance: { required: false, reason: '条件を満たしていません。' },
+                    employmentInsurance: { required: false, reason: '条件を満たしていません。' }
+                };
+                
+                if (!isStudent && weeklyHours >= 20 && monthlyWage >= 88000) {
+                    result.healthInsurance.required = true;
+                    result.healthInsurance.reason = '健康保険の加入要件を満たしています。';
+                    result.pension.required = true;
+                    result.pension.reason = '厚生年金保険の加入要件を満たしています。';
+                }
+
+                if (result.healthInsurance.required && age) {
+                    result.nursingCareInsurance.required = true;
+                    result.nursingCareInsurance.reason = '健康保険に加入し、かつ40歳以上であるため加入対象です。';
+                } else if (!result.healthInsurance.required) {
+                    result.nursingCareInsurance.reason = '健康保険に加入しないため、介護保険も不要です。';
+                } else if (!age) {
+                    result.nursingCareInsurance.reason = '40歳未満のため、介護保険は不要です。';
+                }
+
+                if (!isStudent && weeklyHours >= 20) {
+                    result.employmentInsurance.required = true;
+                    result.employmentInsurance.reason = '雇用保険の加入要件を満たしています。';
+                }
+
+                let resultHtml = `
+                    <div class="space-y-4">
+                        <div class="flex items-center space-x-4">
+                            <span class="text-2xl">${result.healthInsurance.required ? '✅' : '⚠️'}</span>
+                            <div>
+                                <h4 class="text-xl font-bold">健康保険</h4>
+                                <p class="text-lg">${result.healthInsurance.required ? '必要' : '不要'}</p>
+                                <p class="text-sm text-gray-500">${result.healthInsurance.reason}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <span class="text-2xl">${result.pension.required ? '✅' : '⚠️'}</span>
+                            <div>
+                                <h4 class="text-xl font-bold">厚生年金保険</h4>
+                                <p class="text-lg">${result.pension.required ? '必要' : '不要'}</p>
+                                <p class="text-sm text-gray-500">${result.pension.reason}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <span class="text-2xl">${result.nursingCareInsurance.required ? '✅' : '⚠️'}</span>
+                            <div>
+                                <h4 class="text-xl font-bold">介護保険</h4>
+                                <p class="text-lg">${result.nursingCareInsurance.required ? '必要' : '不要'}</p>
+                                <p class="text-sm text-gray-500">${result.nursingCareInsurance.reason}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <span class="text-2xl">${result.employmentInsurance.required ? '✅' : '⚠️'}</span>
+                            <div>
+                                <h4 class="text-xl font-bold">雇用保険</h4>
+                                <p class="text-lg">${result.employmentInsurance.required ? '必要' : '不要'}</p>
+                                <p class="text-sm text-gray-500">${result.employmentInsurance.reason}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="mt-6 text-sm sm:text-base text-gray-600">
+                        ※この診断は一般的な目安であり、最終的な判断は勤め先の担当部署や社会保険労務士にご確認ください。
+                    </p>
+                `;
+
+                resultContent.innerHTML = resultHtml;
+            };
+
+            restartButton.addEventListener('click', () => {
+                userAnswers = {};
+                currentQuestionIndex = 0;
+                questionContainer.classList.remove('hidden');
+                resultContainer.classList.add('hidden');
+                renderQuestion();
+            });
+
+            renderQuestion();
+        });
+    </script>
+</body>
+</html>
