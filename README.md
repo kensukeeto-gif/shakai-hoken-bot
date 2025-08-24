@@ -1,0 +1,1 @@
+# shakai-hoken-bot
